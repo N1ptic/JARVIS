@@ -1,21 +1,27 @@
-# JARVIS Voice Assistant 🗣️🤖
+# JARVIS Voice Assistant 🗣️🤖✨
 
-**Your Personal AI Voice Companion Powered by Local LLMs**
+**Your Advanced AI Voice Companion with a Sci-Fi GUI, Powered by Local LLMs**
 
-JARVIS Voice Assistant is a Python-based interactive voice application that listens to your commands, processes them using a local Large Language Model (LLM) via Ollama, and responds with synthesized speech. It's designed to be a more conversational and intelligent alternative to simple command-echoing scripts.
+JARVIS Voice Assistant is a Python-based interactive voice application that listens to your commands, processes them using a local Large Language Model (LLM) via Ollama, and responds with synthesized speech. It features a graphical user interface (GUI) with voice waveform visualization, continuous listening mode, global hotkeys, and custom command capabilities.
 
 ---
 
-## ✨ Features
+## 🌟 Features
 
+*   **Interactive GUI**: Built with `customtkinter` for a modern, "sci-fi" themed interface.
+*   **Voice Waveform Visualization**: Displays a waveform of your spoken input after each utterance.
+*   **Continuous Conversation Mode**: JARVIS actively listens for follow-up commands after responding, until explicitly stopped.
+*   **Global Hotkey Control**: Toggle listening mode on/off using **Ctrl+J**.
 *   **Voice-to-Text (STT)**: Utilizes `SpeechRecognition` to capture your voice commands.
 *   **Intelligent Response Generation**: Leverages Ollama and a local LLM (e.g., `llama3.2`) to understand and generate human-like responses.
 *   **Text-to-Speech (TTS)**: Uses the `kokoro` library for clear and natural-sounding voice output.
-*   **Conversational Flow**: Designed for more natural back-and-forth interaction.
+*   **Custom Voice Commands**:
+    *   **"Jarvis open chrome"**: Launches the Google Chrome browser.
+    *   **"Jarvis type [your text]"**: Types the specified text into the currently active window.
 *   **Customizable LLM**: Easily configurable to use different models available through Ollama.
-*   **Automatic Audio Playback**: Responses are played automatically using `playsound`.
-*   **Robust Error Handling**: Includes checks for common issues like empty LLM responses and audio file conflicts.
-*   **Timestamped Audio Files**: Saves each audio response with a unique filename to prevent overwriting issues.
+*   **Platform-Aware Audio Playback**: Uses `winsound` on Windows and `playsound` on other OS for reliable audio output.
+*   **Robust Error Handling**: Includes checks for common issues and provides feedback.
+*   **Timestamped Audio Files**: Saves each audio response with a unique filename (though these are temporary and deleted after playback).
 
 ---
 
@@ -32,11 +38,11 @@ Follow these steps to get JARVIS up and running on your system:
     # git clone <repository_url>
     # cd jarvis-voice-assistant
     ```
-    For now, ensure you have `jarvis_voice.py` and the newly created `requirements.txt` in a project directory.
+    For now, ensure you have `jarvis_voice.py` and `requirements.txt` in a project directory.
 
 3.  **Install espeak-ng (Kokoro TTS Dependency)**:
     *   `kokoro` relies on `espeak-ng`. Install it based on your OS:
-        *   **Windows**: Download and install from the [espeak-ng GitHub releases](https://github.com/espeak-ng/espeak-ng/releases). Ensure the installation directory is added to your system's PATH. Alternatively, try `choco install espeak-ng`.
+        *   **Windows**: Download and install from the [espeak-ng GitHub releases](https://github.com/espeak-ng/espeak-ng/releases). **Ensure the installation directory is added to your system's PATH.** Alternatively, try `choco install espeak-ng`.
         *   **Debian/Ubuntu**: `sudo apt-get install espeak-ng`
         *   **macOS**: `brew install espeak-ng`
 
@@ -46,7 +52,7 @@ Follow these steps to get JARVIS up and running on your system:
         ```bash
         ollama pull llama3.2
         ```
-    *   Ensure the Ollama application is running before starting JARVIS.
+    *   **Ensure the Ollama application is running before starting JARVIS.**
 
 5.  **Create a Virtual Environment (Recommended)**:
     ```bash
@@ -61,9 +67,21 @@ Follow these steps to get JARVIS up and running on your system:
         ```bash
         pip install -r requirements.txt
         ```
+    *   **Dependency List**: The `requirements.txt` file includes:
+        *   `kokoro`
+        *   `soundfile`
+        *   `torch`
+        *   `SpeechRecognition`
+        *   `PyAudio`
+        *   `numpy`
+        *   `playsound==1.2.2`
+        *   `ollama`
+        *   `customtkinter`
+        *   `keyboard`
     *   **PyAudio Notes**: If `pip install PyAudio` (or installing via `requirements.txt`) fails:
         *   **Windows**: You might need to install from a precompiled wheel or use `pipwin install pyaudio`.
         *   **Linux**: You might need `portaudio19-dev` (e.g., `sudo apt-get install portaudio19-dev`).
+    *   **Keyboard Library Notes**: The `keyboard` library (for global hotkeys) may require administrator/root privileges to function correctly, especially on Windows and macOS. If the Ctrl+J hotkey doesn't work, try running the script with elevated privileges.
 
 ---
 
@@ -75,76 +93,70 @@ Follow these steps to get JARVIS up and running on your system:
     *   macOS/Linux: `source .venv/bin/activate`
 3.  **Run the Script**:
     ```bash
-    python jarvis_voice.py
+    python JARVIS/jarvis_voice.py
     ```
-4.  **Interact with JARVIS**:
-    *   The script will calibrate the microphone for ambient noise.
-    *   When you see "JARVIS is listening...", speak your command or question.
-    *   JARVIS will process your speech, send it to the LLM, get a response, synthesize it into audio, and play it back.
-    *   Say "exit" or "quit" to end the session.
+    *   If the Ctrl+J hotkey doesn't work, you might need to run with administrator/root privileges. For example, on Windows, open Command Prompt or PowerShell as Administrator, navigate to the project directory, activate the venv, and then run the script.
+
+4.  **Interacting with JARVIS GUI**:
+    *   The application will launch a graphical user interface.
+    *   **Status Bar**: Shows the current status of JARVIS (e.g., "Initializing...", "Listening...", "Kokoro TTS Initialized. Ready.").
+    *   **Conversation Log**: Displays a transcript of your interactions with JARVIS, including system messages.
+    *   **Waveform Display**: After you speak, a visual representation of your voice waveform will appear in this area.
+    *   **Start/Stop Listening Button**:
+        *   Click "🎙️ Start Listening" to activate continuous conversation mode. JARVIS will listen, respond, and then immediately listen for your next command.
+        *   The button will change to "🛑 Stop Listening". Click it to deactivate continuous listening.
+    *   **Ctrl+J Hotkey**: Press `Ctrl+J` at any time (while the application window is active or in the background) to toggle the listening mode, same as clicking the button.
+    *   **Exit Button**: Click "🚪 Exit" to close the application.
+
+5.  **Voice Commands**:
+    *   **General Conversation**: Speak naturally when JARVIS is listening. It will use the LLM to respond.
+    *   **"Jarvis open chrome"** or **"open chrome browser"**: Opens Google Chrome.
+    *   **"Jarvis type [your desired text]"** or **"type this [your desired text]"**: JARVIS will type the text that follows the command phrase into the currently active window. There's a short delay to allow you to switch focus.
+    *   **"Exit"**, **"Quit"**, **"Goodbye Jarvis"**, **"Jarvis shutdown"**: These phrases will shut down the JARVIS application.
 
 ---
 
-## ⚙️ How It Works
+## ⚙️ How It Works (Simplified)
 
-JARVIS operates in a three-stage pipeline:
-
-1.  **Speech-to-Text (STT)**:
-    *   The [`listen_for_command()`](jarvis_voice.py) function uses the `speech_recognition` library with your microphone.
-    *   It captures your audio, then uses Google Speech Recognition (online) to transcribe it into text.
-
-2.  **LLM Processing**:
-    *   The transcribed text is passed to the [`get_jarvis_response()`](jarvis_voice.py) function.
-    *   This function communicates with your local Ollama instance using the `ollama` Python client.
-    *   It sends the user's text along with a system prompt (instructing the LLM to act as JARVIS) to the specified model (e.g., `llama3.2`).
-    *   The LLM generates a text-based response.
-
-3.  **Text-to-Speech (TTS)**:
-    *   The LLM's text response is then passed to the [`generate_speech()`](jarvis_voice.py) function.
-    *   This function uses the `kokoro` library (which relies on `espeak-ng`) to synthesize the text into an audio waveform.
-    *   The audio is saved as a uniquely named `.wav` file (e.g., `jarvis_response_YYYYMMDD_HHMMSSffffff.wav`).
-    *   Finally, `playsound` is used to play the generated audio file.
+1.  **GUI & Control**: `customtkinter` manages the user interface. The `keyboard` library handles global hotkeys.
+2.  **Speech-to-Text (STT)**: [`listen_for_command()`](JARVIS/jarvis_voice.py) uses `speech_recognition` to capture audio and transcribe it. It also returns raw audio data for waveform visualization.
+3.  **Command Processing**:
+    *   The main listening loop checks for custom commands ("open chrome", "type this").
+    *   If no custom command is matched, the transcribed text goes to [`get_jarvis_response()`](JARVIS/jarvis_voice.py).
+4.  **LLM Interaction**: [`get_jarvis_response()`](JARVIS/jarvis_voice.py) sends the text to Ollama for processing by the local LLM.
+5.  **Text-to-Speech (TTS)**: The LLM's response is synthesized into audio by [`generate_speech()`](JARVIS/jarvis_voice.py) using `kokoro`.
+6.  **Audio Playback**: The generated audio is played using `winsound` (Windows) or `playsound` (other OS).
+7.  **Waveform Visualization**: Raw audio data is processed and drawn onto a `tkinter.Canvas` in the GUI.
 
 ---
 
 ## 🛠️ Troubleshooting
 
-*   **`playsound` installation error (`OSError: could not get source code`)**:
-    *   This was addressed by pinning `playsound==1.2.2` in `requirements.txt`. Ensure you install this specific version.
-
-*   **Error opening `jarvis_response.wav`: System error**:
-    *   This was addressed by generating unique, timestamped filenames for each audio output. This prevents conflicts if the previous audio file is still locked.
-
-*   **No audio generated by Kokoro / Kokoro initialization failure**:
-    *   Ensure `espeak-ng` is correctly installed and accessible in your system's PATH.
-    *   Check if the text being sent to Kokoro is not empty or just whitespace (the script now has checks for this).
-    *   Verify Kokoro's language and voice settings if you've modified them.
-
-*   **Ollama errors ("model not found", "connection refused", etc.)**:
-    *   Make sure the Ollama application is running.
-    *   Verify that you have pulled the correct model (e.g., `ollama pull llama3.2`).
-    *   Check your network connection if Ollama is running on a different machine (though typically it's local).
-
-*   **PyAudio installation issues**:
-    *   Refer to the installation notes for OS-specific dependencies like `portaudio19-dev` on Linux or using precompiled wheels on Windows.
-
-*   **"JARVIS: No speech detected within the time limit."**:
-    *   Speak more clearly or closer to the microphone.
-    *   Check your microphone settings in your OS.
-    *   The `timeout` and `phrase_time_limit` in [`listen_for_command()`](jarvis_voice.py) can be adjusted if needed.
+*   **Kokoro / espeak-ng Issues**:
+    *   Ensure `espeak-ng` is correctly installed AND its installation directory is in your system's PATH.
+    *   Verify Kokoro's language and voice settings if modified.
+*   **Ollama Errors**:
+    *   Confirm Ollama application is running and the specified model (e.g., `llama3.2`) is pulled (`ollama pull llama3.2`).
+*   **PyAudio Installation**: See notes in the installation section for OS-specific dependencies.
+*   **Ctrl+J Hotkey Not Working**:
+    *   The `keyboard` library often needs administrator/root privileges. Try running `jarvis_voice.py` with elevated permissions.
+    *   Check the console for error messages related to hotkey registration.
+*   **"No speech detected"**: Check microphone settings, speak clearly, or adjust `timeout` values in [`listen_for_command()`](JARVIS/jarvis_voice.py).
+*   **Audio File Deletion Errors (`WinError 32`)**: The script now uses `winsound` on Windows and includes `winsound.PlaySound(None, winsound.SND_PURGE)` which should significantly mitigate this. If it persists, it might be an OS-level file locking issue.
 
 ---
 
-## 🔮 Future Enhancements
+## 🔮 Future Enhancements (Ideas from previous README)
 
-*   **Wake Word Detection**: Implement a wake word (e.g., "Hey JARVIS") to activate listening instead of continuous listening prompts.
-*   **Offline STT**: Explore options for local/offline Speech-to-Text engines to remove the Google Speech Recognition dependency.
-*   **More Sophisticated Conversation Management**: Implement context memory for multi-turn conversations.
-*   **Plugin System**: Allow integration with other APIs or local scripts to perform actions (e.g., check weather, control smart home devices).
-*   **GUI**: Develop a simple graphical user interface.
-*   **Alternative TTS Engines**: Add support for other TTS engines, potentially local ones.
-*   **Configuration File**: Move settings like LLM model name, voice, etc., to a configuration file.
+*   **Wake Word Detection**: Implement a wake word (e.g., "Hey JARVIS").
+*   **Offline STT**: Explore local/offline Speech-to-Text engines.
+*   **More Sophisticated Conversation Management**: Context memory for multi-turn conversations.
+*   **Plugin System**: For actions like checking weather, controlling smart home devices.
+*   **Alternative TTS Engines**: Support for other TTS engines.
+*   **Configuration File**: For settings like LLM model name, voice, etc.
+*   **Live Waveform**: A waveform that animates *while* speaking (more complex).
+*   **Sci-Fi Sound Effects**: For UI interactions.
 
 ---
 
-Enjoy your conversations with JARVIS!
+Enjoy your advanced conversations with JARVIS!
