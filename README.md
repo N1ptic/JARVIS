@@ -1,5 +1,7 @@
 # JARVIS Voice Assistant 🗣️🤖✨
 
+![JARVIS Logo](jarvis.png)
+
 **Your Advanced AI Voice Companion with a Sci-Fi GUI, Powered by Local LLMs**
 
 JARVIS Voice Assistant is a Python-based interactive voice application that listens to your commands, processes them using a local Large Language Model (LLM) via Ollama, and responds with synthesized speech. It features a graphical user interface (GUI) with voice waveform visualization, continuous listening mode, global hotkeys, and custom command capabilities.
@@ -29,16 +31,21 @@ JARVIS Voice Assistant is a Python-based interactive voice application that list
 
 Follow these steps to get JARVIS up and running on your system:
 
+**Automated Helper Scripts:**
+
+We provide helper scripts to automate parts of the installation (Python environment setup and dependency installation).
+*   **Windows**: Run `install.bat` by double-clicking it or running it from the command prompt.
+*   **macOS/Linux**: Make the script executable (`chmod +x install.sh`) and then run it (`./install.sh`).
+
+These scripts will guide you through the Python-specific setup and remind you of the manual steps required for `espeak-ng` and `Ollama`.
+
+**Manual Installation Steps (if not using or in addition to helper scripts):**
+
 1.  **Python Installation**:
     *   Ensure you have Python 3.7+ installed. You can download it from [python.org](https://www.python.org/downloads/).
 
-2.  **Clone the Repository (or download the script)**:
-    ```bash
-    # If this were a git repo:
-    # git clone <repository_url>
-    # cd jarvis-voice-assistant
-    ```
-    For now, ensure you have `jarvis_voice.py` and `requirements.txt` in a project directory.
+2.  **Clone the Repository (or download the files)**:
+    *   Ensure you have `jarvis_voice.py`, `requirements.txt`, `install.bat` (for Windows), and `install.sh` (for macOS/Linux) in your project directory.
 
 3.  **Install espeak-ng (Kokoro TTS Dependency)**:
     *   `kokoro` relies on `espeak-ng`. Install it based on your OS:

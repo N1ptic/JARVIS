@@ -1,25 +1,6 @@
 # jarvis_voice.py
 # Enhanced for basic conversational interaction with STT, modified TTS, and GUI.
 
-# Installation:
-# 1. Make sure you have Python installed.
-# 2. Install necessary Python packages by opening a terminal or command prompt and running:
-#    pip install kokoro soundfile torch SpeechRecognition PyAudio numpy playsound==1.2.2 ollama customtkinter
-# 3. Kokoro TTS relies on espeak-ng. You will need to install it separately.
-#    - For Windows: Download and install from the espeak-ng GitHub releases page
-#      (https://github.com/espeak-ng/espeak-ng/releases) or try installing via a package
-#      manager like Chocolatey if available (`choco install espeak-ng`).
-#      Ensure the installation directory is added to your system's PATH.
-#    - For Debian/Ubuntu: sudo apt-get install espeak-ng
-#    - For macOS: brew install espeak-ng
-# 4. PyAudio might require additional steps if `pip install PyAudio` fails.
-#    On Windows, you might need to install from a precompiled wheel or use pipwin.
-#    On Linux, you might need `portaudio19-dev` (e.g., `sudo apt-get install portaudio19-dev`).
-# 5. This script now uses Ollama for response generation.
-#    - Install Ollama from https://ollama.com/
-#    - Pull the Llama 3.2 model: `ollama pull llama3.2` (or your preferred model)
-#    - Ensure Ollama is running when you execute this script.
-
 import os
 from datetime import datetime
 try:
@@ -28,129 +9,131 @@ try:
     import torch
     import speech_recognition as sr
     import numpy as np
-    from playsound import playsound
+    from playsound import playsound # Fallback for non-Windows
     import ollama
-    import customtkinter as ctk # Added for GUI
-    import threading             # Added for GUI
-    import queue                 # Added for GUI
-    import sys                   # For platform check
+    import customtkinter as ctk
+    import threading
+    import queue
+    import sys
     if sys.platform == "win32":
-        import winsound # For Windows-specific sound playback
-    import keyboard              # For global hotkeys
-    import subprocess            # To launch external applications
+        import winsound # Preferred for Windows
+    import keyboard
+    import subprocess
+    from PIL import Image, ImageTk
+    import time
+    import tkinter as tk # For basic Tkinter error dialog if CTk fails early
 except ImportError as e:
-    print(f"Error importing libraries: {e}")
-    print("Please ensure you have run: pip install kokoro soundfile torch SpeechRecognition PyAudio numpy playsound==1.2.2 ollama customtkinter")
-    print("And that all dependencies, including espeak-ng and PyAudio's dependencies, are correctly installed.")
+    error_message = f"Error importing libraries: {e}\n" \
+                    "Please ensure you have run: pip install -r JARVIS/requirements.txt\n" \
+                    "And that all dependencies (espeak-ng, PyAudio, Ollama) are correctly installed."
+    print(error_message)
+    # Attempt to show a Tkinter error if possible
+    try:
+        root_err = tk.Tk()
+        root_err.withdraw()
+        tk.messagebox.showerror("JARVIS Startup Error", error_message)
+        root_err.destroy()
+    except:
+        pass # Console print is the fallback
     exit(1)
 
-# Global Kokoro pipeline instance to avoid re-initializing every time
+# --- Global Variables ---
 KOKORO_PIPELINE = None
+APP_NAME = "J.A.R.V.I.S. Interface"
+WINDOW_SIZE = "800x650" # Increased height for waveform
+KOKORO_INIT_SUCCESSFUL = None # None (pending), True (success), False (failure)
+KOKORO_INIT_ERROR_MESSAGE = "Kokoro TTS failed. Check console and espeak-ng setup."
 
+ctk.set_appearance_mode("Dark")
+
+# --- Core Logic Functions (STT, TTS, LLM) ---
 def initialize_kokoro():
-    global KOKORO_PIPELINE
+    global KOKORO_PIPELINE, KOKORO_INIT_ERROR_MESSAGE
     if KOKORO_PIPELINE is None:
         print("Initializing Kokoro TTS pipeline...")
         try:
-            KOKORO_PIPELINE = KPipeline(lang_code='a')
+            KOKORO_PIPELINE = KPipeline(lang_code='a') # Default, consider making configurable
             print("Kokoro TTS pipeline initialized successfully.")
+            return True
         except Exception as e:
-            print(f"Fatal Error initializing KPipeline: {e}")
-            print("This might be due to missing dependencies like espeak-ng.")
-            print("Please ensure espeak-ng is installed and its installation directory is in your system's PATH.")
-            KOKORO_PIPELINE = "error" # Mark as error to prevent retries
+            KOKORO_INIT_ERROR_MESSAGE = f"Fatal Error initializing KPipeline: {e}\n" \
+                                        "This might be due to missing espeak-ng or its PATH configuration."
+            print(KOKORO_INIT_ERROR_MESSAGE)
+            KOKORO_PIPELINE = "error"
+            return False
     return KOKORO_PIPELINE != "error"
 
 def generate_speech(text_to_speak, base_filename="jarvis_response"):
-    """
-    Generates speech from text using Kokoro TTS and saves it to a uniquely named WAV file.
-    """
+    # (Content of generate_speech function - unchanged from previous correct versions)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     output_filename = f"{base_filename}_{timestamp}.wav"
     if KOKORO_PIPELINE is None or KOKORO_PIPELINE == "error":
-        if not initialize_kokoro(): # Attempt to initialize if not already
-            print("Cannot generate speech due to Kokoro initialization failure.")
-            return None
-
+        # This check is redundant if initialize_kokoro is called first, but safe
+        print("Cannot generate speech: Kokoro TTS not ready or failed.")
+        return None
     if not text_to_speak or not text_to_speak.strip():
         print("JARVIS: Text to speak is empty. Cannot generate speech.")
         return None
-
-    print(f"JARVIS generating speech for (full text): \"{text_to_speak}\"")
-    
+    print(f"JARVIS generating speech for: \"{text_to_speak[:60]}...\"")
     try:
         generator = KOKORO_PIPELINE(text_to_speak, voice='af_heart')
-        
-        all_audio_chunks = []
-        for i, (gs, ps, audio_chunk) in enumerate(generator):
-            all_audio_chunks.append(audio_chunk)
-            
+        all_audio_chunks = [audio_chunk for _, _, audio_chunk in generator]
         if not all_audio_chunks:
-            print("No audio was generated by Kokoro. Check the input text and model compatibility.")
+            print("No audio was generated by Kokoro. Check input text and model.")
             return None
-        
         full_audio = np.concatenate(all_audio_chunks)
-        sf.write(output_filename, full_audio, 24000)
-        print(f"JARVIS speech saved to {output_filename}")
+        sf.write(output_filename, full_audio, 24000) # Kokoro's default sample rate
+        # print(f"JARVIS speech saved to {output_filename}") # Less verbose
         return output_filename
-            
     except Exception as e:
         print(f"Error during speech generation: {e}")
         return None
 
 def listen_for_command():
-    """
-    Listens for a command from the user via microphone and returns the recognized text.
-    """
+    # (Content of listen_for_command function - unchanged from previous correct versions)
     recognizer = sr.Recognizer()
     microphone = sr.Microphone()
-
     with microphone as source:
-        print("\nCalibrating microphone for ambient noise...")
-        recognizer.adjust_for_ambient_noise(source, duration=1)
-        print("JARVIS is listening... (Say 'exit' or 'quit' to stop)")
+        print("\nCalibrating microphone...")
+        try:
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+        except Exception as e:
+            print(f"Mic calibration error: {e}. Using default.")
+        print("JARVIS is listening...")
         try:
             audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
         except sr.WaitTimeoutError:
-            print("JARVIS: No speech detected within the time limit.")
-            return None, None # Return None for command and audio_data
-
+            print("JARVIS: No speech detected.")
+            return None, None
+        except Exception as e: # Catch other listen errors
+            print(f"Error during listen: {e}")
+            return None, None
     try:
-        print("JARVIS processing your speech...")
-        command = recognizer.recognize_google(audio) # 'audio' is an AudioData object
+        print("JARVIS processing speech...")
+        command = recognizer.recognize_google(audio)
         print(f"You said: {command}")
-        return command.lower(), audio # Return command and audio_data
+        return command.lower(), audio
     except sr.UnknownValueError:
         print("JARVIS: Sorry, I could not understand what you said.")
-        return None, audio # Return audio even if not understood, for potential visualization
+        return None, audio # Return audio for waveform even if not understood
     except sr.RequestError as e:
-        print(f"JARVIS: Could not request results from Google Speech Recognition service; {e}")
-        print("         Please check your internet connection.")
-        return None, None # No command, no audio_data
+        print(f"JARVIS: Google Speech Recognition error; {e}")
+        return None, None
     except Exception as e:
-        print(f"JARVIS: An unexpected error occurred during speech recognition: {e}")
-        return None, None # No command, no audio_data
+        print(f"JARVIS: Unexpected error in speech recognition: {e}")
+        return None, None
 
 def get_jarvis_response(user_input):
-    """
-    Generates a conversational response based on user input using Ollama.
-    """
+    # (Content of get_jarvis_response function - unchanged from previous correct versions)
     if not user_input:
         return "I didn't catch that. Could you please repeat?"
-
-    print(f"JARVIS sending to Ollama (llama3.2): \"{user_input[:50]}...\"")
+    print(f"JARVIS sending to Ollama: \"{user_input[:50]}...\"")
     try:
         response = ollama.chat(
-            model='llama3.2',
+            model='llama3.2', # Ensure this model is pulled in Ollama
             messages=[
-                {
-                    'role': 'system',
-                    'content': 'You are JARVIS, a helpful and friendly AI assistant. Respond conversationally and aim to be concise. If the user asks a question you cannot answer, politely say so. Do not return empty responses.'
-                },
-                {
-                    'role': 'user',
-                    'content': user_input,
-                }
+                {'role': 'system', 'content': 'You are JARVIS, a helpful and friendly AI assistant. Respond conversationally and aim to be concise. If you cannot answer, politely say so.'},
+                {'role': 'user', 'content': user_input}
             ]
         )
         llm_response = response['message']['content'].strip()
@@ -159,119 +142,90 @@ def get_jarvis_response(user_input):
             return "I'm not sure how to respond to that. Could you try asking differently?"
         return llm_response
     except ollama.ResponseError as e:
-        print(f"JARVIS: Error communicating with Ollama: {e.error}")
-        if "model not found" in e.error.lower():
-            return "I'm having trouble accessing my language model. Please ensure 'llama3.2' is pulled in Ollama."
-        return "I'm sorry, I'm having trouble thinking of a response right now. Please check if Ollama is running."
+        error_detail = str(e.error) if hasattr(e, 'error') else str(e)
+        print(f"JARVIS: Error communicating with Ollama: {error_detail}")
+        if "model not found" in error_detail.lower():
+            return "Language model not found. Please ensure 'llama3.2' is pulled in Ollama."
+        return "Sorry, I'm having trouble thinking of a response. Check Ollama connection."
     except Exception as e:
-        print(f"JARVIS: An unexpected error occurred while getting LLM response: {e}")
-        return "An unexpected error occurred while trying to generate a response."
+        print(f"JARVIS: Unexpected error getting LLM response: {e}")
+        return "An unexpected error occurred while generating a response."
 
-# --- GUI Class ---
-APP_NAME = "J.A.R.V.I.S. Interface"
-WINDOW_SIZE = "800x600"
-
-ctk.set_appearance_mode("Dark")
-
-class JarvisGUI(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-
-        self.title(APP_NAME)
-        self.geometry(WINDOW_SIZE)
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-        self.kokoro_initialized = False
+# --- GUI Class (Now a CTkFrame) ---
+class JarvisGUI(ctk.CTkFrame):
+    def __init__(self, master, kokoro_ready, **kwargs):
+        super().__init__(master, **kwargs)
+        self.master = master
+        self.kokoro_initialized = kokoro_ready # Set based on splash screen init
         self.is_listening = False
         self.response_queue = queue.Queue()
 
-        self.main_frame = ctk.CTkFrame(self, corner_radius=10)
-        self.main_frame.pack(padx=20, pady=20, fill="both", expand=True)
+        self.pack(fill="both", expand=True)
+        self._create_widgets()
+        
+        self.after(100, self.process_queue)
+        self.setup_hotkeys()
+        self.post_kokoro_init_ui_setup() # Initial UI state based on Kokoro
 
-        self.title_label = ctk.CTkLabel(self.main_frame, text="J.A.R.V.I.S.", font=ctk.CTkFont(size=30, weight="bold"))
+    def _create_widgets(self):
+        self.title_label = ctk.CTkLabel(self, text="J.A.R.V.I.S.", font=ctk.CTkFont(size=30, weight="bold"))
         self.title_label.pack(pady=(10, 20))
 
-        self.status_display_frame = ctk.CTkFrame(self.main_frame, corner_radius=5)
+        self.status_display_frame = ctk.CTkFrame(self, corner_radius=5)
         self.status_display_frame.pack(pady=10, padx=10, fill="x")
-        
-        self.status_label_title = ctk.CTkLabel(self.status_display_frame, text="Status:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w")
-        self.status_label_title.pack(side="left", padx=(10,5), pady=5)
-
+        ctk.CTkLabel(self.status_display_frame, text="Status:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").pack(side="left", padx=(10,5), pady=5)
         self.status_label = ctk.CTkLabel(self.status_display_frame, text="Initializing...", font=ctk.CTkFont(size=14), anchor="w")
         self.status_label.pack(side="left", padx=(0,10), pady=5, fill="x", expand=True)
 
-        self.conversation_log = ctk.CTkTextbox(
-            self.main_frame, height=200, font=ctk.CTkFont(size=12),
-            wrap="word", activate_scrollbars=True, corner_radius=5
-        )
+        self.conversation_log = ctk.CTkTextbox(self, height=200, font=ctk.CTkFont(size=12), wrap="word", activate_scrollbars=True, corner_radius=5)
         self.conversation_log.pack(pady=10, padx=10, fill="both", expand=True)
         self.conversation_log.configure(state="disabled")
 
-        # --- Waveform Display Area ---
-        self.waveform_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=5)
+        self.waveform_frame = ctk.CTkFrame(self, height=100, corner_radius=5)
         self.waveform_frame.pack(pady=10, padx=10, fill="x")
-        self.waveform_frame.grid_propagate(False) # Prevent children from resizing frame
+        self.waveform_frame.grid_propagate(False)
+        canvas_bg_color = self.cget("fg_color")[1] if isinstance(self.cget("fg_color"), tuple) else "#2B2B2B"
+        self.waveform_canvas = tk.Canvas(self.waveform_frame, bg=canvas_bg_color, bd=0, highlightthickness=0)
+        self.waveform_canvas.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # Using tkinter.Canvas as CTkCanvas might not be as flexible for custom drawing
-        import tkinter as tk
-        self.waveform_canvas = tk.Canvas(self.waveform_frame, bg=self.main_frame.cget("fg_color")[1], bd=0, highlightthickness=0)
-        self.waveform_canvas.pack(fill="both", expand=True)
-        self.waveform_canvas.create_text(10, 10, text="Waveform will appear here...", anchor="nw", fill="gray")
-
-
-        self.controls_frame = ctk.CTkFrame(self.main_frame, corner_radius=0, fg_color="transparent")
+        self.controls_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.controls_frame.pack(pady=(10,20), padx=10, fill="x")
         self.controls_frame.grid_columnconfigure((0, 1), weight=1)
 
-        self.listen_button = ctk.CTkButton(
-            self.controls_frame, text="🎙️ Start Listening", font=ctk.CTkFont(size=16, weight="bold"),
-            command=self.toggle_listening, height=50, corner_radius=8
-        )
+        self.listen_button = ctk.CTkButton(self.controls_frame, text="🎙️ Start Listening", font=ctk.CTkFont(size=16, weight="bold"), command=self.toggle_listening, height=50, corner_radius=8, state="disabled")
         self.listen_button.grid(row=0, column=0, padx=(0,5), pady=5, sticky="ew")
-        self.listen_button.configure(state="disabled") # Enabled after Kokoro init
 
-        self.exit_button = ctk.CTkButton(
-            self.controls_frame, text="🚪 Exit", font=ctk.CTkFont(size=16, weight="bold"),
-            command=self.on_closing, height=50, fg_color="#D32F2F",
-            hover_color="#B71C1C", corner_radius=8
-        )
+        self.exit_button = ctk.CTkButton(self.controls_frame, text="🚪 Exit", font=ctk.CTkFont(size=16, weight="bold"), command=self.on_closing, height=50, fg_color="#D32F2F", hover_color="#B71C1C", corner_radius=8)
         self.exit_button.grid(row=0, column=1, padx=(5,0), pady=5, sticky="ew")
 
-        self.update_status("Initializing Kokoro TTS...")
-        self.add_to_log("System: Initializing Kokoro TTS...")
-        threading.Thread(target=self.initialize_systems_gui, daemon=True).start()
-        self.after(100, self.process_queue)
-        self.setup_hotkeys()
+    def post_kokoro_init_ui_setup(self):
+        if self.kokoro_initialized:
+            self.update_status("Kokoro TTS Initialized. Ready.")
+            self.add_to_log("System: Kokoro TTS Initialized. Ready.")
+            self.listen_button.configure(state="normal")
+            self.clear_waveform("Ready. Press Ctrl+J or 'Start Listening'.")
+        else:
+            self.update_status(f"ERROR: {KOKORO_INIT_ERROR_MESSAGE}")
+            self.add_to_log(f"System: ERROR - {KOKORO_INIT_ERROR_MESSAGE}", "Error")
+            self.listen_button.configure(state="disabled")
+            self.clear_waveform("TTS System Error.")
 
     def setup_hotkeys(self):
         try:
-            keyboard.add_hotkey('ctrl+j', self.on_hotkey_press)
-            self.add_to_log("System: Ctrl+J hotkey registered to toggle listening.", "System")
+            keyboard.add_hotkey('ctrl+j', self.on_hotkey_press, suppress=False) # suppress=False might be needed
+            self.add_to_log("System: Ctrl+J hotkey registered.", "System")
             print("System: Ctrl+J hotkey registered.")
         except Exception as e:
-            # This can happen if not run with admin rights
             error_msg = f"Failed to register Ctrl+J hotkey: {e}. Try running as administrator."
             self.add_to_log(error_msg, "Error")
             print(f"Error: {error_msg}")
             self.update_status(f"Hotkey Error: {e}")
 
-
     def on_hotkey_press(self):
-        # This callback might be executed in a different thread by the keyboard library.
-        # Ensure GUI updates are thread-safe by queuing them or using ctk.after.
-        # self.toggle_listening() is already designed to be called and queue updates.
         print("Ctrl+J hotkey pressed!")
-        self.toggle_listening() # This method already handles GUI updates via the queue
+        # Ensure toggle_listening is called in the main thread context if hotkey lib uses own thread
+        self.master.after(0, self.toggle_listening)
 
-    def initialize_systems_gui(self): # Renamed to avoid conflict if any global initialize_systems
-        if initialize_kokoro(): # Uses the global function
-            self.kokoro_initialized = True
-            self.response_queue.put(("status", "Kokoro TTS Initialized. Ready."))
-            self.response_queue.put(("log", "System: Kokoro TTS Initialized. Ready.")) # String data
-            self.response_queue.put(("enable_listen", None))
-        else:
-            self.response_queue.put(("status", "ERROR: Kokoro TTS failed to initialize! Check console."))
-            self.response_queue.put(("log", "System: ERROR - Kokoro TTS failed. Check console for details.")) # String data
 
     def update_status(self, message):
         self.status_label.configure(text=message)
@@ -279,8 +233,7 @@ class JarvisGUI(ctk.CTk):
 
     def add_to_log(self, message, sender="System"):
         self.conversation_log.configure(state="normal")
-        formatted_message = f"[{sender.upper()}]: {message}\n"
-        self.conversation_log.insert("end", formatted_message)
+        self.conversation_log.insert("end", f"[{sender.upper()}]: {message}\n")
         self.conversation_log.see("end")
         self.conversation_log.configure(state="disabled")
 
@@ -289,257 +242,181 @@ class JarvisGUI(ctk.CTk):
             self.update_status("Cannot listen: Kokoro TTS not ready.")
             self.add_to_log("System: Attempted to listen but TTS not ready.", "Error")
             return
-
-        if self.is_listening: # If currently listening, stop it
+        if self.is_listening:
             self.is_listening = False
             self.listen_button.configure(text="🎙️ Start Listening", fg_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"], state="normal")
-            self.update_status("Continuous listening stopped by user.")
+            self.update_status("Continuous listening stopped.")
             self.add_to_log("System: Continuous listening stopped.")
-        else: # If not listening, start it
+            self.response_queue.put(("clear_waveform", "Listening stopped."))
+        else:
             self.is_listening = True
-            self.listen_button.configure(text="🛑 Stop Listening", fg_color="orange", state="normal") # Button to stop
+            self.listen_button.configure(text="🛑 Stop Listening", fg_color="orange", state="normal")
             self.update_status("Continuous listening activated...")
             self.add_to_log("System: Continuous listening mode activated.")
-            # Start the listening loop in a new thread
+            self.clear_waveform("Listening...")
             threading.Thread(target=self.continuous_listen_loop, daemon=True).start()
 
     def continuous_listen_loop(self):
-        """Handles the continuous listening and processing loop."""
-        while self.is_listening: # Loop as long as is_listening is true
-            self.response_queue.put(("status", "Listening for your command..."))
-            self.response_queue.put(("log", ("System: Listening...", "System"))) # Log that it's listening
-            
-            user_input, audio_data = listen_for_command() # Now returns audio_data as well
+        # (Content of continuous_listen_loop - largely unchanged, ensure it uses response_queue correctly)
+        while self.is_listening:
+            # self.response_queue.put(("status", "Listening for your command...")) # Status set by toggle_listening
+            # self.response_queue.put(("log", ("System: Listening...", "System"))) # Log set by toggle_listening
+            user_input, audio_data = listen_for_command()
 
-            if not self.is_listening: # Check again in case stop was pressed during listen_for_command
-                self.response_queue.put(("clear_waveform", "Listening stopped."))
+            if not self.is_listening: # Loop might have been stopped while listening
+                self.response_queue.put(("listening_done", None)) # Ensure UI updates
                 break
             
-            if audio_data: # If there's audio data, try to visualize it
-                self.response_queue.put(("waveform_data", audio_data))
-            else: # No audio data (e.g., timeout), clear waveform
-                self.response_queue.put(("clear_waveform", "No audio detected."))
-
+            if audio_data: self.response_queue.put(("waveform_data", audio_data))
+            else: self.response_queue.put(("clear_waveform", "No audio detected."))
 
             if user_input:
                 self.response_queue.put(("log", (f"You said: {user_input}", "User")))
                 self.response_queue.put(("status", f"Processing: \"{user_input[:30]}...\""))
 
-                # Check for local "stop listening" commands if desired, or rely on button
-                # For example, if user_input == "jarvis stop listening":
-                #   self.is_listening = False # This would stop the loop after this interaction
-                #   self.response_queue.put(("listening_done", None)) # Update button
-                #   self.response_queue.put(("log", ("Stopping continuous listening via voice command.", "System")))
-                #   self.speak_and_play_gui("Okay, stopping continuous listening.")
-                #   break # Exit loop
-
-                if user_input in ["exit", "quit", "goodbye jarvis", "jarvis shutdown"]: # Keywords to close app
-                    self.response_queue.put(("log", ("System: Shutdown sequence initiated by voice.", "System")))
+                if user_input in ["exit", "quit", "goodbye jarvis", "jarvis shutdown"]:
+                    self.response_queue.put(("log", ("System: Shutdown sequence initiated.", "System")))
                     self.response_queue.put(("status", "Shutting down..."))
                     self.speak_and_play_gui("Goodbye! Shutting down.", "jarvis_farewell")
-                    self.response_queue.put(("close_app", None))
-                    self.is_listening = False # Ensure loop terminates
-                    break
-                
-                # --- Custom Command Handling ---
+                    self.response_queue.put(("close_app", None)) # Signal main thread to close
+                    self.is_listening = False # Stop this loop
+                    break 
                 elif "jarvis open chrome" in user_input or "open chrome browser" in user_input:
                     self.response_queue.put(("log", ("Opening Google Chrome...", "System")))
                     self.response_queue.put(("status", "Opening Google Chrome..."))
                     self.speak_and_play_gui("Certainly, opening Google Chrome.")
                     try:
-                        if sys.platform == "win32":
-                            subprocess.Popen(["start", "chrome"], shell=True)
-                        elif sys.platform == "darwin": # macOS
-                            subprocess.Popen(["open", "-a", "Google Chrome"])
-                        else: # Linux and other Unix-like
-                            # Try common names for Chrome executable
-                            chrome_cmds = ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]
+                        if sys.platform == "win32": subprocess.Popen(["start", "chrome"], shell=True)
+                        elif sys.platform == "darwin": subprocess.Popen(["open", "-a", "Google Chrome"])
+                        else:
                             launched = False
-                            for cmd in chrome_cmds:
-                                try:
-                                    subprocess.Popen([cmd])
-                                    launched = True
-                                    break
-                                except FileNotFoundError:
-                                    continue
+                            for cmd_name in ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]:
+                                try: subprocess.Popen([cmd_name]); launched = True; break
+                                except FileNotFoundError: continue
                             if not launched:
-                                self.response_queue.put(("log", ("Could not find Chrome executable on Linux.", "Error")))
-                                self.speak_and_play_gui("I couldn't find Google Chrome to open on your system.")
+                                self.response_queue.put(("log", ("Could not find Chrome executable.", "Error")))
+                                self.speak_and_play_gui("I couldn't find Google Chrome on your system.")
                     except Exception as e:
                         self.response_queue.put(("log", (f"Failed to open Chrome: {e}", "Error")))
-                        self.speak_and_play_gui(f"Sorry, I encountered an error trying to open Chrome: {e}")
-                
-                # --- Type Command Handling ---
+                        self.speak_and_play_gui(f"Sorry, an error occurred opening Chrome: {e}")
                 elif user_input.startswith("jarvis type") or user_input.startswith("type this"):
                     text_to_type = ""
-                    if user_input.startswith("jarvis type"):
-                        # "jarvis type " is 12 chars. Add 1 for space if "jarvis type this"
-                        # More robust: find the first occurrence of "type " and take text after it.
-                        # Let's assume "jarvis type " or "type "
-                        if "jarvis type " in user_input:
-                             # "jarvis type " is 12 chars
-                            text_to_type = user_input[len("jarvis type "):].strip()
-                        elif "type this " in user_input: # "type this " is 10 chars
-                            text_to_type = user_input[len("type this "):].strip()
-                        elif "type " in user_input: # "type " is 5 chars
-                             text_to_type = user_input[len("type "):].strip()
-
-
+                    if user_input.startswith("jarvis type "): text_to_type = user_input[len("jarvis type "):].strip()
+                    elif user_input.startswith("type this "): text_to_type = user_input[len("type this "):].strip()
+                    elif user_input.startswith("type "): text_to_type = user_input[len("type "):].strip()
+                    
                     if text_to_type:
                         self.response_queue.put(("log", (f"Typing: \"{text_to_type}\"", "System")))
                         self.response_queue.put(("status", f"Typing: \"{text_to_type[:30]}...\""))
-                        # It's better not to speak while typing to avoid interference
-                        # self.speak_and_play_gui(f"Okay, typing: {text_to_type}")
                         try:
-                            import time
-                            time.sleep(0.5) # Small delay to allow user to switch window if needed
+                            time.sleep(0.5) 
                             keyboard.write(text_to_type)
                             self.response_queue.put(("log", ("Typing complete.", "System")))
                         except Exception as e:
                             self.response_queue.put(("log", (f"Failed to type: {e}", "Error")))
-                            self.speak_and_play_gui(f"Sorry, I encountered an error while trying to type: {e}")
+                            self.speak_and_play_gui(f"Sorry, an error occurred while typing: {e}")
                     else:
                         self.response_queue.put(("log", ("No text specified for typing.", "System")))
                         self.speak_and_play_gui("What would you like me to type?")
-                # --- End Type Command Handling ---
-                else:
-                    # If no custom command matched, get LLM response
+                else: # Default to LLM response
                     response_text = get_jarvis_response(user_input)
-                    self.response_queue.put(("log", (f"{response_text}", "JARVIS")))
+                    self.response_queue.put(("log", (response_text, "JARVIS")))
                     self.response_queue.put(("status", "Speaking response..."))
                     self.speak_and_play_gui(response_text)
                 
-                if not self.is_listening: # If stop was pressed during TTS/play
-                    break
-            else:
-                # No input or STT error, just loop again if still in listening mode
+                if not self.is_listening: break # Check again if stop was signaled during processing
+            else: # No user input from listen_for_command
                 self.response_queue.put(("log", ("No command detected or STT error. Listening again.", "System")))
                 self.response_queue.put(("status", "No command detected. Listening again..."))
-            
-            # Small delay before listening again, can be adjusted or removed
-            # import time
-            # time.sleep(0.1)
-
-        # Loop finished (either by button or command)
-        if not self.is_listening: # Ensure UI reflects stopped state if loop exited for other reasons
-             self.response_queue.put(("listening_done", None)) # Update button and status
+                self.response_queue.put(("clear_waveform", "Listening...")) # Keep waveform clear
+        
+        # Loop ended
+        if not self.is_listening: # If loop exited because is_listening became false
+             self.response_queue.put(("listening_done", None)) # Ensure UI updates to non-listening state
         print("Continuous listening loop ended.")
 
-    def speak_and_play_gui(self, text, base_filename="jarvis_response_gui"): # Renamed
-        global KOKORO_PIPELINE # Ensure access to global
+
+    def speak_and_play_gui(self, text, base_filename="jarvis_response_gui"):
+        # (Content of speak_and_play_gui - unchanged from previous correct versions, including winsound/playsound logic and file deletion)
         if not self.kokoro_initialized or KOKORO_PIPELINE == "error":
             self.response_queue.put(("log", ("Cannot speak: Kokoro TTS not ready or failed.", "Error")))
             self.response_queue.put(("status", "Error: TTS not available."))
             return
-
-        output_audio_file = generate_speech(text, base_filename=base_filename) # Global function
+        output_audio_file = generate_speech(text, base_filename=base_filename)
         if output_audio_file:
-            self.response_queue.put(("log", (f"Audio saved: {os.path.basename(output_audio_file)}", "System")))
+            # self.response_queue.put(("log", (f"Audio saved: {os.path.basename(output_audio_file)}", "System"))) # Less verbose
             try:
                 if sys.platform == "win32":
-                    winsound.PlaySound(output_audio_file, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                    # For winsound, SND_ASYNC allows the program to continue.
-                    # We might need to manage the deletion more carefully if playback is truly async
-                    # or use SND_SYNC if we want to wait for it to finish.
-                    # Let's try SND_FILENAME first which should be synchronous.
-                    # Reverting to SND_FILENAME as SND_ASYNC might cause issues with immediate deletion.
                     winsound.PlaySound(output_audio_file, winsound.SND_FILENAME)
-                    winsound.PlaySound(None, winsound.SND_PURGE) # Attempt to release file handle
+                    winsound.PlaySound(None, winsound.SND_PURGE) 
                 else:
-                    playsound(output_audio_file) # Fallback for other OS
+                    playsound(output_audio_file)
                 self.response_queue.put(("log", ("Playback complete.", "System")))
             except Exception as e:
                 self.response_queue.put(("log", (f"Error playing sound: {str(e)}", "Error")))
                 self.response_queue.put(("status", f"Error playing sound: {str(e)}"))
             
-            # Attempt to delete the file with a short delay and retries
-            import time
             deleted = False
-            for i in range(5): # Try up to 5 times
+            for i in range(5): # Retry deletion
                 try:
-                    time.sleep(0.2 * (i + 1)) # Increasing delay: 0.2s, 0.4s, 0.6s, 0.8s, 1.0s
+                    time.sleep(0.1 * (i + 1)) # Shorter, increasing delay
                     os.remove(output_audio_file)
-                    self.response_queue.put(("log", (f"Cleaned up: {os.path.basename(output_audio_file)}", "System")))
-                    deleted = True
-                    break
-                except PermissionError as e: # Specifically catch permission errors
-                    if i < 4: # If not the last attempt
-                        self.response_queue.put(("log", (f"Deletion attempt {i+1} failed for {os.path.basename(output_audio_file)}, retrying...", "System")))
-                    else:
-                        self.response_queue.put(("log", (f"Error deleting audio file {os.path.basename(output_audio_file)} after multiple attempts: {str(e)}", "Error")))
-                except Exception as e: # Catch other potential errors during deletion
-                    self.response_queue.put(("log", (f"Unexpected error deleting audio file {os.path.basename(output_audio_file)}: {str(e)}", "Error")))
-                    break # Don't retry on unexpected errors
-            if not deleted and os.path.exists(output_audio_file): # If still not deleted
-                 self.response_queue.put(("log", (f"Could not delete audio file {os.path.basename(output_audio_file)}. It might still be in use.", "Warning")))
+                    # self.response_queue.put(("log", (f"Cleaned up: {os.path.basename(output_audio_file)}", "System"))) # Less verbose
+                    deleted = True; break
+                except PermissionError:
+                    if i == 4: self.response_queue.put(("log", (f"Error deleting audio file {os.path.basename(output_audio_file)} after retries.", "Error")))
+                    # else: self.response_queue.put(("log", (f"Deletion attempt {i+1} failed for {os.path.basename(output_audio_file)}, retrying...", "System")))
+                except Exception as e:
+                    self.response_queue.put(("log", (f"Unexpected error deleting audio file: {str(e)}", "Error"))); break
+            if not deleted and os.path.exists(output_audio_file):
+                 self.response_queue.put(("log", (f"Could not delete {os.path.basename(output_audio_file)}. It might be in use.", "Warning")))
         else:
             self.response_queue.put(("log", ("Failed to generate speech audio.", "Error")))
             self.response_queue.put(("status", "Error: Failed to generate speech."))
 
+
     def process_queue(self):
+        # (Content of process_queue - largely unchanged, ensure it handles all message types)
         try:
-            while True:
+            while True: # Process all available messages
                 message_type, data = self.response_queue.get_nowait()
-                if message_type == "status":
-                    self.update_status(data)
+                if message_type == "status": self.update_status(data)
                 elif message_type == "log":
-                    if isinstance(data, tuple) and len(data) == 2: # data is (message, sender)
-                        self.add_to_log(data[0], data[1])
-                    elif isinstance(data, str): # data is message_string (sender defaults to "System")
-                        self.add_to_log(data)
-                    else: # Fallback for unexpected log data format
-                        self.add_to_log(str(data), "System/Unknown")
-                elif message_type == "enable_listen":
-                    self.listen_button.configure(state="normal")
-                elif message_type == "listening_done":
-                    self.is_listening = False
+                    msg, sender = data if isinstance(data, tuple) and len(data) == 2 else (data, "System")
+                    self.add_to_log(msg, sender)
+                elif message_type == "enable_listen": # This might be redundant if post_kokoro_init_ui_setup handles it
+                    if self.kokoro_initialized: self.listen_button.configure(state="normal")
+                elif message_type == "listening_done": # Called when continuous_listen_loop ends due to self.is_listening=False
+                    self.is_listening = False # Ensure state consistency
                     self.listen_button.configure(text="🎙️ Start Listening", state="normal", fg_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"])
                     self.update_status("Ready for next command.")
-                elif message_type == "close_app":
-                    self.on_closing()
+                    self.clear_waveform("Ready.")
+                elif message_type == "close_app": self.on_closing() # Triggered by voice command "exit" etc.
                 elif message_type == "waveform_data":
-                    if data: # data is an AudioData object
-                        self.draw_waveform(data)
+                    if data: self.draw_waveform(data)
                 elif message_type == "clear_waveform":
-                    self.clear_waveform(data if data else "Listening...") # data is message string
-        except queue.Empty:
-            pass
-        finally:
-            self.after(100, self.process_queue)
+                    self.clear_waveform(data if isinstance(data, str) else "Listening...")
+        except queue.Empty: pass
+        finally: self.after(100, self.process_queue) # Schedule next check
 
     def draw_waveform(self, audio_data: sr.AudioData):
+        # (Content of draw_waveform - unchanged from previous correct versions)
         self.waveform_canvas.delete("all")
+        raw_data, sample_width = audio_data.frame_data, audio_data.sample_width
+        dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
+        if sample_width not in dtype_map:
+            self.clear_waveform(f"Unsupported audio sample width: {sample_width}"); return
+        try: samples = np.frombuffer(raw_data, dtype=dtype_map[sample_width])
+        except Exception as e: self.clear_waveform(f"Error processing audio data: {e}"); return
+        if len(samples) == 0: self.clear_waveform("Empty audio data for waveform."); return
         
-        raw_data = audio_data.frame_data
-        sample_width = audio_data.sample_width
-        
-        if sample_width == 1: dtype = np.int8
-        elif sample_width == 2: dtype = np.int16
-        elif sample_width == 4: dtype = np.int32
-        else:
-            self.clear_waveform(f"Unsupported sample width: {sample_width}")
-            return
-
-        try:
-            samples = np.frombuffer(raw_data, dtype=dtype)
-        except Exception as e:
-            self.clear_waveform(f"Error processing audio: {e}")
-            return
-
-        if len(samples) == 0:
-            self.clear_waveform("Empty audio data.")
-            return
-
-        max_abs_val = np.max(np.abs(samples))
-        if max_abs_val == 0: max_abs_val = 1
-        normalized_samples = samples / max_abs_val
+        max_abs_val = np.max(np.abs(samples)) if len(samples) > 0 else 1.0
+        normalized_samples = samples / max_abs_val if max_abs_val > 0 else samples.astype(float) # Avoid division by zero
         
         canvas_width = self.waveform_canvas.winfo_width()
         canvas_height = self.waveform_canvas.winfo_height()
-        
-        if canvas_width <=1 or canvas_height <=1:
-            self.after(50, lambda ad=audio_data: self.draw_waveform(ad))
-            return
+        if canvas_width <= 1 or canvas_height <= 1: # Canvas not ready
+            self.after(50, lambda ad=audio_data: self.draw_waveform(ad)); return # Retry
 
         num_points_to_draw = canvas_width
         if len(normalized_samples) > num_points_to_draw:
@@ -549,56 +426,165 @@ class JarvisGUI(ctk.CTk):
             plot_samples = normalized_samples
         
         num_points_to_draw = len(plot_samples)
-        if num_points_to_draw < 2:
-            self.clear_waveform("Not enough data for waveform.")
-            return
+        if num_points_to_draw < 2: 
+            self.clear_waveform("Not enough data points for waveform."); return
 
-        points = []
         y_offset = canvas_height / 2
-        y_amplitude = (canvas_height / 2) * 0.8
-        for i, sample_val in enumerate(plot_samples):
-            x = (i / (num_points_to_draw -1)) * canvas_width if num_points_to_draw > 1 else canvas_width / 2
-            y = y_offset - (sample_val * y_amplitude)
+        y_amplitude = (canvas_height / 2) * 0.85 # Use 85% of half-height
+        
+        # Create a list of (x, y) coordinates
+        points = []
+        for i, sample_value in enumerate(plot_samples):
+            x = (i / (num_points_to_draw - 1)) * canvas_width if num_points_to_draw > 1 else canvas_width / 2
+            y = y_offset - (sample_value * y_amplitude)
             points.extend([x, y])
         
-        self.waveform_canvas.create_line(points, fill="#00BCD4", width=1.5)
-        self.waveform_canvas.create_line(0, y_offset, canvas_width, y_offset, fill="gray", width=0.5)
+        self.waveform_canvas.create_line(points, fill="#00BCD4", width=1.5) # Sci-fi cyan
+        self.waveform_canvas.create_line(0, y_offset, canvas_width, y_offset, fill="#555555", width=0.5) # Center line
 
     def clear_waveform(self, message="Listening..."):
+        # (Content of clear_waveform - unchanged from previous correct versions)
         self.waveform_canvas.delete("all")
         try:
+            self.waveform_canvas.update_idletasks() # Ensure dimensions are current
             width = self.waveform_canvas.winfo_width()
             height = self.waveform_canvas.winfo_height()
-            if width > 1 and height > 1:
-                 self.waveform_canvas.create_text(width/2, height/2, text=message, anchor="center", fill="gray", font=("Arial", 10))
-            else:
-                self.waveform_canvas.create_text(10, 10, text=message, anchor="nw", fill="gray", font=("Arial", 10))
-        except tk.TclError:
+            anchor_pos_x = width / 2 if width > 1 else 10
+            anchor_pos_y = height / 2 if height > 1 else 10
+            anchor_type = "center" if width > 1 and height > 1 else "nw"
+            self.waveform_canvas.create_text(anchor_pos_x, anchor_pos_y, text=message, anchor=anchor_type, fill="gray", font=("Arial", 10))
+        except tk.TclError: # If canvas is destroyed or not ready
              self.waveform_canvas.create_text(10, 10, text=message, anchor="nw", fill="gray", font=("Arial", 10))
 
 
     def on_closing(self):
         print("JARVIS GUI is closing.")
-        try:
-            keyboard.remove_hotkey('ctrl+j') # Unregister hotkey
-            print("System: Ctrl+J hotkey unregistered.")
-        except Exception as e:
-            print(f"Error unregistering hotkey: {e}")
-        # Add any cleanup for threads if necessary, though daemon threads should exit
-        self.destroy()
+        try: keyboard.remove_hotkey('ctrl+j'); print("System: Ctrl+J hotkey unregistered.")
+        except Exception as e: print(f"Note: Could not unregister hotkey: {e}")
+        self.is_listening = False # Stop any listening loops
+        if hasattr(self.master, 'quit') and callable(self.master.quit):
+            self.master.quit()
+        if hasattr(self.master, 'destroy') and callable(self.master.destroy):
+            self.master.destroy()
+        sys.exit(0)
 
+# --- Splash Screen and Main Application Logic ---
 if __name__ == "__main__":
-    # The original CLI mode is replaced by the GUI mode.
-    # initialize_kokoro() is called within the GUI's initialization thread.
-    
-    # Check if customtkinter is available, though import would have failed earlier
+    # 1. Initial Dependency Check (Basic Tkinter for error reporting if CTk fails)
     try:
-        ctk.CTk() # Try to instantiate a basic CTk object to ensure it's working
+        if not hasattr(ctk, "CTkFrame"): raise ImportError("CustomTkinter seems not fully available.")
+        Image.new("RGB", (1,1)) # Basic Pillow check
     except Exception as e:
-        print(f"CustomTkinter check failed: {e}")
-        print("Please ensure customtkinter is installed correctly and all its dependencies (like tkinter) are met.")
-        print("Falling back to CLI mode or exiting might be an option here if desired.")
-        exit(1)
+        critical_error_message = f"Critical Dependency Missing:\n{e}\n\nPlease install all requirements from JARVIS/requirements.txt.\nApplication will exit."
+        print(critical_error_message)
+        try:
+            err_root = tk.Tk()
+            err_root.withdraw() # Hide the main window of this temporary root
+            tk.messagebox.showerror("JARVIS Startup Error", critical_error_message, parent=None)
+            err_root.destroy()
+        except Exception as tk_e:
+            print(f"Could not display Tkinter error dialog: {tk_e}")
+        sys.exit(1)
+
+    # 2. Create the main application root window (hidden initially)
+    root = ctk.CTk()
+    root.title(APP_NAME)
+    root.geometry(WINDOW_SIZE)
+    root.withdraw() 
+
+    splash_screen_window = None
+
+    # 3. Kokoro Initialization Thread
+    def run_kokoro_initialization_thread():
+        global KOKORO_INIT_SUCCESSFUL # Modifies global
+        # initialize_kokoro() already prints its status and sets KOKORO_PIPELINE and KOKORO_INIT_ERROR_MESSAGE
+        KOKORO_INIT_SUCCESSFUL = initialize_kokoro()
+
+    # 4. Function to check Kokoro status and transition
+    def check_kokoro_status_and_launch_main_app():
+        global splash_screen_window, root, KOKORO_INIT_SUCCESSFUL
         
-    app = JarvisGUI()
-    app.mainloop()
+        if KOKORO_INIT_SUCCESSFUL is None: # Still initializing
+            if root.winfo_exists(): # Ensure root is still there for .after
+                root.after(100, check_kokoro_status_and_launch_main_app)
+            return
+
+        if splash_screen_window and splash_screen_window.winfo_exists():
+            splash_screen_window.destroy()
+            splash_screen_window = None
+
+        if KOKORO_INIT_SUCCESSFUL:
+            app_frame = JarvisGUI(master=root, kokoro_ready=True)
+            # app_frame.post_kokoro_init_ui_setup() # Called from JarvisGUI.__init__ via kokoro_ready
+            root.deiconify() # Show the main root window
+        else:
+            # Kokoro failed. Show error in a new Toplevel of the (still hidden) root.
+            root.withdraw() # Ensure root is hidden
+            error_dialog = ctk.CTkToplevel(root)
+            error_dialog.title("JARVIS Initialization Error")
+            error_message_full = f"FATAL ERROR:\n{KOKORO_INIT_ERROR_MESSAGE}\n\nApplication will exit."
+            ctk.CTkLabel(error_dialog, text=error_message_full, font=("Arial", 14), wraplength=380, justify="left").pack(pady=20, padx=20)
+            
+            def quit_app_on_error_dialog():
+                error_dialog.destroy()
+                root.quit()
+                root.destroy()
+                sys.exit(1)
+            ctk.CTkButton(error_dialog, text="OK", command=quit_app_on_error_dialog, width=100).pack(pady=10)
+            
+            error_dialog.update_idletasks()
+            ew, eh = 400, 220 # Adjusted height for potentially longer error
+            sx = (error_dialog.winfo_screenwidth() // 2) - (ew // 2)
+            sy = (error_dialog.winfo_screenheight() // 2) - (eh // 2)
+            error_dialog.geometry(f"{ew}x{eh}+{sx}+{sy}")
+            error_dialog.lift()
+            error_dialog.attributes("-topmost", True)
+            # The root.mainloop() will handle this dialog until quit_app_on_error_dialog is called.
+            # If user closes error dialog via window manager, on_closing of root should handle exit.
+
+    # 5. Function to display splash screen
+    def display_splash_screen():
+        global splash_screen_window, root
+
+        splash_screen_window = ctk.CTkToplevel(root) # Parent is the hidden root
+        splash_screen_window.overrideredirect(True) # Frameless
+        
+        img_path = "jarvis.png" 
+        splash_width, splash_height = 300, 150 
+        try:
+            if not os.path.exists(img_path): raise FileNotFoundError(f"Splash image not found: {img_path}")
+            pil_image = Image.open(img_path)
+            max_splash_width, max_splash_height = 400, 300
+            pil_image.thumbnail((max_splash_width, max_splash_height), Image.Resampling.LANCZOS)
+            ctk_image = ImageTk.PhotoImage(pil_image)
+            img_label = ctk.CTkLabel(splash_screen_window, image=ctk_image, text="")
+            img_label.image = ctk_image 
+            img_label.pack(pady=20, padx=20)
+            splash_width, splash_height = pil_image.width + 40, pil_image.height + 80 
+        except Exception as e:
+            ctk.CTkLabel(splash_screen_window, text="J.A.R.V.I.S.", font=ctk.CTkFont(size=40, weight="bold")).pack(pady=20, padx=50)
+            print(f"Splash image error: {e}. Displaying text.")
+
+        ctk.CTkLabel(splash_screen_window, text="Initializing Systems...", font=ctk.CTkFont(size=14)).pack(pady=(0, 20))
+        
+        splash_screen_window.update_idletasks() # Needed to get correct screen width/height
+        screen_width = splash_screen_window.winfo_screenwidth()
+        screen_height = splash_screen_window.winfo_screenheight()
+        x_pos = (screen_width // 2) - (splash_width // 2)
+        y_pos = (screen_height // 2) - (splash_height // 2)
+        splash_screen_window.geometry(f"{splash_width}x{splash_height}+{x_pos}+{y_pos}")
+        
+        splash_screen_window.lift()
+        splash_screen_window.attributes("-topmost", True)
+        # splash_screen_window.update_idletasks() # Already called
+
+        # Start Kokoro initialization in a separate thread
+        init_thread = threading.Thread(target=run_kokoro_initialization_thread, daemon=True)
+        init_thread.start()
+
+        # Schedule the first check for Kokoro init completion using the root's event loop
+        root.after(100, check_kokoro_status_and_launch_main_app)
+        
+    # 6. Start the process
+    display_splash_screen()
+    root.mainloop() # Single mainloop for the entire application.
