@@ -1,0 +1,8 @@
+kokoro
+soundfile
+torch
+SpeechRecognition
+PyAudio
+numpy
+playsound==1.2.2
+ollama
